@@ -20,6 +20,7 @@
 #include "flutter/impeller/geometry/scalar.h"
 #include "flutter/testing/display_list_testing.h"
 #include "flutter/testing/testing.h"
+#include "imgui.h"
 #include "impeller/playground/widgets.h"
 
 namespace impeller {
@@ -686,6 +687,47 @@ TEST_P(AiksTest, FilledCirclesRenderCorrectly) {
   ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
 }
 
+TEST_P(AiksTest, DrawThinStrokedCircle) {
+  auto callback = [&]() {
+    static float stroked_radius = 100.0;
+    static float stroke_width = 0.0;
+    static float stroke_width_fine = 2.0;
+    static float stroked_alpha = 255.0;
+    static float stroked_scale[2] = {1.0, 1.0};
+
+    if (AiksTest::ImGuiBegin("Controls", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::SliderFloat("Stroked Radius", &stroked_radius, 0, 500);
+      ImGui::SliderFloat("Stroked Width", &stroke_width, 0, 500);
+      ImGui::SliderFloat("Stroked Width Fine", &stroke_width_fine, 0, 5);
+      ImGui::SliderFloat("Stroked Alpha", &stroked_alpha, 0, 10.0);
+      ImGui::SliderFloat2("Stroked Scale", stroked_scale, 0, 10.0);
+      ImGui::End();
+    }
+
+    flutter::DisplayListBuilder builder;
+
+    DlPaint background_paint;
+    background_paint.setColor(DlColor(1, 0.1, 0.1, 0.1, DlColorSpace::kSRGB));
+    builder.DrawPaint(background_paint);
+
+    flutter::DlPaint paint;
+
+    paint.setColor(flutter::DlColor::kRed().withAlpha(stroked_alpha));
+    paint.setDrawStyle(flutter::DlDrawStyle::kStroke);
+    paint.setStrokeWidth(stroke_width + stroke_width_fine);
+    builder.Save();
+    builder.Translate(250, 250);
+    builder.Scale(stroked_scale[0], stroked_scale[1]);
+    builder.Translate(-250, -250);
+    builder.DrawCircle(DlPoint(250, 250), stroked_radius, paint);
+    builder.Restore();
+    return builder.Build();
+  };
+
+  ASSERT_TRUE(OpenPlaygroundHere(callback));
+}
+
 TEST_P(AiksTest, StrokedCirclesRenderCorrectly) {
   DisplayListBuilder builder;
   builder.Scale(GetContentScale().x, GetContentScale().y);
@@ -852,6 +894,25 @@ void RenderArcFarm(DisplayListBuilder& builder,
   }
   builder.Restore();
 }
+
+void RenderArcFarmForOverlappingCapsTest(DisplayListBuilder& builder,
+                                         const DlPaint& paint) {
+  builder.Save();
+  builder.Translate(40, 30);
+  const Rect arc_bounds = Rect::MakeLTRB(0, 0, 40, 40);
+  for (int stroke_width = 10; stroke_width <= 40; stroke_width += 3) {
+    DlPaint modified_paint = DlPaint(paint);
+    modified_paint.setStrokeWidth(stroke_width);
+    builder.Save();
+    for (int sweep = 160; sweep <= 360; sweep += 20) {
+      builder.DrawArc(arc_bounds, 0, sweep, false, modified_paint);
+      builder.Translate(84, 0);
+    }
+    builder.Restore();
+    builder.Translate(0, 44 + stroke_width);
+  }
+  builder.Restore();
+}
 }  // namespace
 
 TEST_P(AiksTest, FilledArcsRenderCorrectly) {
@@ -861,6 +922,23 @@ TEST_P(AiksTest, FilledArcsRenderCorrectly) {
 
   DlPaint paint;
   paint.setColor(DlColor::kBlue());
+
+  RenderArcFarm(builder, paint,
+                {
+                    .use_center = false,
+                    .full_circles = false,
+                });
+
+  ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
+}
+
+TEST_P(AiksTest, TranslucentFilledArcsRenderCorrectly) {
+  DisplayListBuilder builder;
+  builder.Scale(GetContentScale().x, GetContentScale().y);
+  builder.DrawColor(DlColor::kWhite(), DlBlendMode::kSrc);
+
+  DlPaint paint;
+  paint.setColor(DlColor::kBlue().modulateOpacity(0.5));
 
   RenderArcFarm(builder, paint,
                 {
@@ -964,6 +1042,21 @@ TEST_P(AiksTest, StrokedArcsRenderCorrectlyWithSquareEnds) {
   ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
 }
 
+TEST_P(AiksTest, StrokedArcsRenderCorrectlyWithTranslucencyAndSquareEnds) {
+  DisplayListBuilder builder;
+  builder.Scale(GetContentScale().x, GetContentScale().y);
+  builder.DrawColor(DlColor::kWhite(), DlBlendMode::kSrc);
+
+  DlPaint paint;
+  paint.setDrawStyle(DlDrawStyle::kStroke);
+  paint.setStrokeCap(DlStrokeCap::kSquare);
+  paint.setColor(DlColor::kBlue().modulateOpacity(0.5));
+
+  RenderArcFarmForOverlappingCapsTest(builder, paint);
+
+  ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
+}
+
 TEST_P(AiksTest, StrokedArcsRenderCorrectlyWithRoundEnds) {
   DisplayListBuilder builder;
   builder.Scale(GetContentScale().x, GetContentScale().y);
@@ -980,6 +1073,21 @@ TEST_P(AiksTest, StrokedArcsRenderCorrectlyWithRoundEnds) {
                     .use_center = false,
                     .full_circles = false,
                 });
+
+  ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
+}
+
+TEST_P(AiksTest, StrokedArcsRenderCorrectlyWithTranslucencyAndRoundEnds) {
+  DisplayListBuilder builder;
+  builder.Scale(GetContentScale().x, GetContentScale().y);
+  builder.DrawColor(DlColor::kWhite(), DlBlendMode::kSrc);
+
+  DlPaint paint;
+  paint.setDrawStyle(DlDrawStyle::kStroke);
+  paint.setStrokeCap(DlStrokeCap::kRound);
+  paint.setColor(DlColor::kBlue().modulateOpacity(0.5));
+
+  RenderArcFarmForOverlappingCapsTest(builder, paint);
 
   ASSERT_TRUE(OpenPlaygroundHere(builder.Build()));
 }
